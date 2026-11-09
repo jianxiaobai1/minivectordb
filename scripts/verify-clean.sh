@@ -2,8 +2,13 @@
 # Proves the deliverable is self-contained: clone the branch into a fresh
 # directory, build it there, and run the functional suite against that binary.
 set -u
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC="$(dirname "$here")"
+# The repo is passed in rather than derived from this file's location, so the
+# script keeps working when it is copied or piped somewhere else.
+SRC="${1:-}"
+if [ -z "$SRC" ]; then
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  SRC="$(dirname "$here")"
+fi
 DEST=/tmp/mvd-clean-clone
 rm -rf "$DEST"
 git clone -q --branch 2026-competition-round2 "$SRC" "$DEST"
