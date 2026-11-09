@@ -1,0 +1,41 @@
+OK
+OK 3
+OK
+1	alpha	[1,0,0]
+2	中文😀	[0,1,0]
+3	gamma	[0,0,1]
+1	1.000000
+2	1.000000
+3	1.000000
+1	alpha	[1,0,0]
+2	中文😀	[0,1,0]
+3	gamma	[0,0,1]
+1	1.000000
+2	1.000000
+3	1.000000
+OK 1
+OK 1
+OK 1
+OK
+OK 1
+OK
+1	ALPHA	[0.5,0.5,0]
+2	中文😀	[0,1,0]
+4	δ	[1,1,1]
+5	txn-committed	[2,0,0]
+1	ALPHA	0.707107
+5	txn-committed	1.000000
+OK
+OK 1
+OK
+1
+2
+4
+5
+OK 1
+7	fresh	[0.25,0.25,0.25]
+OK
+ERROR NO_SUCH_TABLE: table 'p' does not exist
+OK
+OK 1
+1	5.000000

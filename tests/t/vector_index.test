@@ -1,0 +1,71 @@
+# vector_index: CREATE VECTOR INDEX must stay coherent with DML (rule 14),
+# exact mode stays exact even with an ANN index present (rule 15), and the
+# index survives restarts (rule 13).
+
+CREATE TABLE ix (id BIGINT PRIMARY KEY, v VECTOR(2));
+
+INSERT INTO ix VALUES (1, [0, 0]), (2, [1, 0]), (3, [5, 5]);
+
+CREATE VECTOR INDEX ix_v ON ix(v);
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM ix ORDER BY d ASC LIMIT 3;
+
+# rows inserted after the index was built must show up (rule 14)
+INSERT INTO ix VALUES (4, [0.1, 0]);
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM ix ORDER BY d ASC LIMIT 2;
+
+# updated rows must be reflected with their new vectors
+UPDATE ix SET v = [0, 0.05] WHERE id = 2;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM ix ORDER BY d ASC LIMIT 2;
+
+# deleted rows must disappear from results
+DELETE FROM ix WHERE id = 1;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM ix ORDER BY d ASC LIMIT 3;
+
+# same answers in approximate mode on this tiny collection
+SET vector_mode = ann;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM ix ORDER BY d ASC LIMIT 3;
+
+# and exact mode keeps answering exactly with the index present (rule 15)
+SET vector_mode = exact;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM ix ORDER BY d ASC LIMIT 3;
+
+# a DML + restart cycle: index is rebuilt/reloaded from persisted records
+INSERT INTO ix VALUES (5, [0, 0.01]), (6, [7, 7]);
+
+# restart
+
+SELECT id, L2_DISTANCE(v, [0, 0.02]) AS d FROM ix ORDER BY d ASC LIMIT 3;
+
+UPDATE ix SET v = [0.001, 0] WHERE id = 2;
+
+DELETE FROM ix WHERE id = 6;
+
+# restart
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM ix ORDER BY d ASC LIMIT 4;
+
+# re-creating the index is idempotent for query answers
+CREATE VECTOR INDEX ix_v2 ON ix(v);
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM ix ORDER BY d ASC LIMIT 4;
+
+# error paths
+CREATE TABLE plain (id BIGINT PRIMARY KEY, s VARCHAR(4));
+
+# expect-error TYPE_MISMATCH
+CREATE VECTOR INDEX bad ON plain(s);
+
+# expect-error NO_SUCH_TABLE
+CREATE VECTOR INDEX bad2 ON nosuch(id);
+
+# expect-error UNSUPPORTED
+CREATE VECTOR INDEX bad3 ON ix(id);
+
+DROP TABLE ix;
+DROP TABLE plain;

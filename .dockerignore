@@ -1,0 +1,8 @@
+build/
+tests/
+bench/
+agent/
+README.md
+Dockerfile
+.dockerignore
+*.md

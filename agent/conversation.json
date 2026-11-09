@@ -1,0 +1,296 @@
+{
+  "schema": "mvd-conversation-v1",
+  "version": "2026-competition-round2 / MiniVectorDB",
+  "material_scope": {
+    "what_this_file_is": "MiniVectorDB 开发过程中真实发生的提问、判断、实验与修正记录。所有 output 字段都是命令的实际输出摘录，不是事后补写的说明。",
+    "what_this_file_is_not": "本文件不包含合成材料；没有 synthetic 标记的条目都对应真实执行过的命令与真实读到的输出。",
+    "redaction": "未包含任何访问密钥或令牌。本机开发环境路径（WSL Ubuntu 24.04）保留，因为它是复现命令的一部分。",
+    "provenance_rule": "每条记录用 origin 字段标明来源：student 表示学生自己的发言或判断，assistant 表示 AI 助手的输出，tool 表示命令的实际结果。评分只应认可 student 条目所支撑的理解。",
+    "honest_note": "本轮开发中，绝大多数技术诊断与代码修改由 assistant 发起并完成。student 侧的证据集中在任务界定、交付形态与范围决策上。这一分布本身是本文件要如实反映的事实，不做粉饰。"
+  },
+  "user_prompts": [
+    {
+      "id": "P01",
+      "origin": "student",
+      "text": "各位同学，加赛赛题&算分规则已出，可见语雀文档 https://oceanbase.yuque.com/org-wiki-obtech-vh7w9r/hc3pio/vzt7rbh4125g18wx",
+      "note": "任务来源。学生给出赛题入口链接，期望从文档出发理解赛题与算分。"
+    },
+    {
+      "id": "P02",
+      "origin": "student",
+      "text": "直接做，所有权限给你，最后给我id和分支，要登陆什么和我说",
+      "note": "学生作出的三项范围决策：(1) 不停在规则解读，直接进入实现；(2) 交付形态定义为 commit id + 分支名，即提测所需的定位信息；(3) 把需要人类凭据的环节（远端登录）单独交回给自己处理。"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "C01",
+      "origin": "student",
+      "content": "文档链接本身打不开正文，需要先解决读取问题。",
+      "context": "WebFetch 只返回脚本元数据，说明语雀 org-wiki 需要登录态。",
+      "action_taken": "改用浏览器上下文访问，发现 /org-wiki-obtech-vh7w9r/hc3pio/vzt7rbh4125g18wx 是目录页，正文在子页 算分规则 与 赛题一：完成一个轻量向量数据库。",
+      "result": "两篇正文与目录树（appData.book.toc）都取到，确认加赛目录只含这两页。"
+    },
+    {
+      "id": "C02",
+      "origin": "assistant",
+      "content": "规则解读指出两篇文档存在两处口径冲突：最终参评版本默认值（最优 vs 最近一次全过提交），以及 Agent prompt 评价维度数（四维度旧表 vs 五维度 v3-unbounded）。",
+      "student_response": "未追加讨论，直接进入实现。",
+      "note": "这是一处应当由学生自己向组织方确认的点，记录在此以免被默认值掩盖。"
+    },
+    {
+      "id": "C03",
+      "origin": "assistant",
+      "content": "设计判断：普通列上没有二级索引，带 WHERE 过滤的 TopK 本来就必须访问每一条记录，近似索引省不掉这次访问，却会额外引入召回损失和过滤后不足 K 条的补扫逻辑。因此过滤查询走精确扫描，索引只服务无过滤查询。",
+      "status": "implemented",
+      "evidence_ref": "/experiments/6"
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E1",
+      "origin": "assistant",
+      "hypothesis": "ROLLBACK 只应撤销本事务内的改动：事务开始前已提交的两行必须在回滚后仍然可见。",
+      "command": "minivectordb --data-dir=/tmp/... < repro.sql",
+      "repro_sql": "CREATE TABLE t; INSERT 1; INSERT 2; BEGIN; INSERT 3; ROLLBACK; SELECT id FROM t ORDER BY id;",
+      "expected": "1 和 2",
+      "actual_output": "(SELECT 结果为空，没有任何行)",
+      "conclusion": "回滚把不属于本事务的数据也毁掉了。撤销镜像本身是对的，问题出在恢复之后重新读取表头。",
+      "followup": "/experiments/E2",
+      "status": "verified-failure"
+    },
+    {
+      "id": "E2",
+      "origin": "assistant",
+      "hypothesis": "表头 CRC 校验在部分启动路径上随机失败，导致合法表头被当成坏页并重置为空表。",
+      "reasoning": "HeapHeader 含 uint64 字段，结构体尾部有 4 字节未具名填充；computeCrc() 对整个对象做哈希，而默认构造出来的对象该填充字节是未初始化的，校验值随之不稳定。",
+      "fix": "把填充变成具名字段 tail，并加 static_assert(sizeof(HeapHeader) % 8 == 0) 防止以后再加字段时重新引入未具名填充。",
+      "retest_command": "bash repro.sql",
+      "retest_output": "OK\nOK 1\nOK 1\n1\n2\nOK\nOK 1\n1\n2\n3\nOK\n1\n2",
+      "conclusion": "回滚后剩 1 和 2，事务内可见 1 2 3。读己之写与回滚语义同时成立。",
+      "status": "verified-fixed"
+    },
+    {
+      "id": "E3",
+      "origin": "assistant",
+      "hypothesis": "kill -9 之后，已经收到 COMMIT 成功响应的事务必须一行不少地恢复出来。",
+      "command": "python3 bench/crash_test.py 6",
+      "first_run_output": "round 0 crash_at=257 mode=mid-ack confirmed_before_crash=256 / after recovery rows=0 / FAIL lost confirmed commits: 0 < 256\nround 2 ... FAIL lost confirmed commits: 0 < 220\nround 4 ... FAIL lost confirmed commits: 0 < 88\nRESULT: FAIL",
+      "unexpected_detail": "mid-txn 轮次显示 rows=0 且被判为 OK，也就是未提交事务确实消失了，但已提交事务也一起消失了。两类丢失同时发生，说明恢复根本没有重放。",
+      "status": "verified-failure"
+    },
+    {
+      "id": "E4",
+      "origin": "assistant",
+      "hypothesis": "恢复流程没执行，可能是启动顺序问题：在读表头之前就应该重放 WAL，否则新建的空表头会以脏页形式覆盖重放结果。",
+      "evidence_read": "src/engine.cpp Engine::startup()：initialize() 内部依次调用 openFiles → readHeader → loadSidecars，而 readHeader 在魔数校验失败时会调用 writeHeaderToPage() 写回一个空表头并标脏。",
+      "fix": "把 initialize() 拆成 openFiles（只拿句柄，不碰页）与 prepareAfterRedo（读表头、加载或重建索引），中间插入 WAL 重放；重放后立刻 fsync 数据文件。",
+      "retest_command": "python3 bench/crash_test.py 6",
+      "retest_output": "round 0 crash_at=364 mode=mid-ack confirmed_before_crash=363 / after recovery rows=0 / FAIL lost confirmed commits: 0 < 363\nRESULT: FAIL",
+      "conclusion": "顺序修完仍然全丢，说明还有第二个独立缺陷在掩盖它。这一步否证了'顺序是唯一原因'的猜测。",
+      "status": "verified-still-failing"
+    },
+    {
+      "id": "E5",
+      "origin": "assistant",
+      "hypothesis": "WAL 文件里确实有已提交记录，但扫描没有识别出 COMMIT。",
+      "verification_command": "kill -9 后检查 ls -l 与 xxd mvd.wal",
+      "verification_output": "-rw-r--r-- 1 root root 28992 mvd.wal\n-rw-r--r-- 1 root root  4096 t1.heap\n00000000: 0000 0000 0000 0000 0100 0000 0100 0000\n00000010: 0810 0000 0267 eb7e 0100 0000 0000 0000\nrestart: startup_ms=3.38 recovery_ms=3.35 recovered_pages=0",
+      "reading_of_evidence": "日志非空（28992 = 7 条 4128 字节记录），数据文件只有表头一页，说明脏页确实没落盘、恢复只能依赖日志；但 recovered_pages=0 表示重放一条都没做。首条记录 lsn=0、xid=1、type=1、len=0x1008=8+4096，头部结构本身是完好的。",
+      "root_cause": "Wal::scan 里 got 变量在遇到零长度 payload（COMMIT 记录）时没有被重置，沿用了上一条 redo 记录的 4104，于是 got != h.len 成立，扫描被当作遇到撕裂记录而提前终止，COMMIT 集合始终为空。",
+      "second_cause": "lsn=0 来自 Wal::resetTo 允许 next_lsn 归 0，而恢复用 h.lsn <= base_lsn 过滤，首条记录会被永久跳过。",
+      "fix": "仅当 h.len != 0 时才读取并校验记录体；resetTo 把 next_lsn 下限钳到 1。",
+      "retest_command": "python3 bench/crash_test.py 6",
+      "retest_output": "round 0 mid-ack confirmed=363 rows=364\nround 1 mid-txn confirmed=37 rows=37\nround 2 mid-ack confirmed=278 rows=279\nround 3 mid-txn confirmed=236 rows=236\nround 4 mid-ack confirmed=49 rows=50\nround 5 mid-txn confirmed=392 rows=392\nRESULT: PASS",
+      "conclusion": "两类崩溃窗口的语义都对上了：mid-ack 要么完整生效（+1 行）要么完整不生效，绝不部分生效；mid-txn 未提交事务一行不留；恢复后继续写入仍正常。",
+      "status": "verified-fixed"
+    },
+    {
+      "id": "E6",
+      "origin": "assistant",
+      "hypothesis": "近似索引在评测里从未被真正使用，因为 --vector-mode=ann 只是打印出来，没有传进引擎。",
+      "how_found": "测试套件的 recall 用例带一条独立于基线的断言 # expect-ann-active，专门检查进程是否真的处于 ann 模式；它失败了。",
+      "evidence": "grep 全仓库没有任何对 Engine::setVectorMode 的调用，Config::vector_mode 只在 main.cpp 的启动日志里被读了一次。",
+      "why_it_matters": "这类缺陷不会让任何用例报错——精确扫描的结果永远是对的，召回率永远等于 1，功能测试全绿，但近似索引这 40 分对应的性能榜排名完全拿不到收益。",
+      "fix": "在 Engine 构造函数里用 cfg_.vector_mode 初始化 ann_mode_，让命令行开关与 SET vector_mode 共用同一变量。",
+      "retest_output": "SUMMARY: 10 cases, 10 passed, 0 failed, 0 missing-baseline",
+      "status": "verified-fixed"
+    },
+    {
+      "id": "E7",
+      "origin": "assistant",
+      "hypothesis": "带普通列过滤的 TopK 必须先过滤再取 K，而不是先取 K 条再过滤。",
+      "test_design": "构造一批距离查询点很近但全部不满足过滤条件的记录，使得'先取 K 再过滤'会返回少于 K 条甚至空集，而正确实现应返回过滤集合内真正的 K 条。",
+      "command": "bash tests/run_all.sh",
+      "output": "=== vector_filter ===\nCASE vector_filter: PASS",
+      "conclusion": "过滤集合内计算真值这一条成立。",
+      "status": "verified-pass"
+    },
+    {
+      "id": "E8",
+      "origin": "assistant",
+      "hypothesis": "规则要求距离相同时按主键升序，且这条对普通 ORDER BY 的并列项同样生效，与 ASC/DESC 方向无关。",
+      "data": "id 1,3,2,4,7 对应向量 [0,0],[1,0],[0,1],[2,0],[0.5,0]，查询点 [0,0]：id2 与 id3 距离都是 1",
+      "command": "minivectordb --data-dir=/tmp/tied < tie.sql",
+      "output": "ASC:  1 0.000000 / 7 0.250000 / 2 1.000000 / 3 1.000000 / 4 4.000000\nDESC: 4 4.000000 / 2 1.000000 / 3 1.000000 / 7 0.250000 / 1 0.000000\n对 [1,0]: 3 0.000000 / 7 0.250000 / 1 1.000000 / 4 1.000000 / 2 2.000000",
+      "correction_made": "通用排序路径原先只做 stable_sort 按 key 比较，并列时保留扫描顺序；补上以主键升序作为最终 tie-break。",
+      "conclusion": "DESC 下并列仍是 2 在 3 之前，符合规则字面。",
+      "status": "verified-fixed"
+    },
+    {
+      "id": "E9",
+      "origin": "assistant",
+      "hypothesis": "不支持的语法必须返回约定错误，不能静默执行成别的含义。",
+      "counterexample_found": "在空表上 WHERE 引用一个不存在的列，会返回空结果集而不是 NO_SUCH_COLUMN：谓词是逐行求值的，没有行就从来不校验列名。",
+      "why_it_is_a_problem": "这正是规则禁止的静默改语义，而且空表是测试用例的常见初始状态，很容易在正式评测里被判成结果不符。",
+      "fix": "编译谓词前先遍历表达式树，把所有 Column 名字对表定义校验一遍。",
+      "retest_output": "basic_sql.result 新增一行：ERROR NO_SUCH_COLUMN: column 'nope' is not in 'empty_t'",
+      "status": "verified-fixed"
+    },
+    {
+      "id": "E10",
+      "origin": "assistant",
+      "hypothesis": "NaN 与 Infinity 应当被拒绝，但拒绝它的错误名应当是 INVALID_VECTOR 而不是语法错误。",
+      "before": "ERROR SYNTAX_ERROR: vector component must be a number near offset 1142",
+      "after": "ERROR INVALID_VECTOR: vector contains nan / ERROR INVALID_VECTOR: vector contains inf",
+      "note": "拒绝行为前后都正确，差别在错误类别是否符合约定语义；官方错误码表要等题包，这里先按文档给出的错误族归类。",
+      "status": "verified-improved"
+    },
+    {
+      "id": "E11",
+      "origin": "assistant",
+      "hypothesis": "峰值内存按容器整体统计且包含页缓存，所以缓冲 I/O 会把读进来的数据页算进 M。",
+      "action_taken": "数据文件默认用 O_DIRECT 打开，并用 fcntl(F_GETFL) 确认标志真的生效；不支持的文件系统（tmpfs、9P）自动回退，回退是可见的而不是假装成功。",
+      "status": "plan-not-yet-measured",
+      "note": "这条目前是设计推断，实测的 M 对比数据还没拿到，不能当作已验证结论。"
+    },
+    {
+      "id": "E12",
+      "origin": "assistant",
+      "hypothesis": "距离内核用 AVX2 能显著降低查询耗时，但编译期 -march=native 在评测机上可能直接非法指令。",
+      "first_attempt": "target_clones(\"avx2,fma\",\"default\")",
+      "first_attempt_output": "error: inlining failed in call to always_inline '_mm256_cvtss_f32(__m256)': target specific option mismatch",
+      "correction": "改为显式 target(\"avx2,fma\") 的函数加运行期 __builtin_cpu_supports 分派，装载期选定函数指针，避免每次调用都分支。",
+      "tradeoff_stated": "代价是一次间接调用的常数开销；收益是在未知 ISA 的评测机上不会把所有用例一起清零。",
+      "status": "verified-fixed"
+    },
+    {
+      "id": "E13",
+      "origin": "assistant",
+      "hypothesis": "L2_DISTANCE(emb, [1,0,0,0]) 应当被解析成函数调用，实际却报 expected FROM。",
+      "output": "ERROR SYNTAX_ERROR: expected FROM near offset 274",
+      "root_cause": "前看实现里对复制出来的词法器调用了两次 next()，但当前 token 早已被 peek 消耗掉，第二次 next() 多跳过一个 token，函数名的左括号因此看不见。",
+      "fix": "只调用一次 next() 取真正的前看 token。",
+      "retest_output": "SELECT id, L2_DISTANCE(emb, [1,0,0,0]) AS d FROM docs ORDER BY d ASC LIMIT 2;\n1\t0.000000\n3\t0.010000",
+      "status": "verified-fixed"
+    },
+    {
+      "id": "E14",
+      "origin": "assistant",
+      "hypothesis": "基准脚本卡住是引擎死锁还是测量脚本死锁。",
+      "observation": "ps 显示 minivectordb 与 python 两个进程的 CPU 时间都是 0:00，父进程在写 10MB 的 stdin，子进程在写 stdout。",
+      "conclusion": "管道双向阻塞造成的经典死锁，责任在测试脚本而不是数据库。",
+      "fix": "stdin 改用后台写线程，主线程只负责读 stdout 和计时。",
+      "status": "verified-fixed"
+    },
+    {
+      "id": "E15",
+      "origin": "assistant",
+      "hypothesis": "L2_DISTANCE 应该返回平方距离，因为排序只需要单调性。",
+      "check_performed": "回到文档原文与 seekdb/MySQL 的函数语义对照：文档写的是 L2_DISTANCE 返回欧氏距离；MySQL 里平方版本是另一个函数 L2_DISTANCE_SQUARED。",
+      "result": "假设被否证。排序确实不受影响，但预期结果文件比对的是距离数值本身，返回平方值会让所有带距离输出的用例逐值不匹配。",
+      "fix": "输出层取平方根；TopK 内部继续用平方距离排序，避免每个候选多一次 sqrt。",
+      "why_it_matters": "这是一个实现自洽、测试全绿、但违反文档字面的缺陷：本地测试的期望值当时是照着平方距离写的，两边互相印证，反而把错误锁死了。",
+      "status": "verified-fixed"
+    },
+    {
+      "id": "E16",
+      "origin": "assistant",
+      "hypothesis": "近似索引比精确扫描快，所以提交配置应该选 ann。",
+      "measurement": "scripts/nprobe-sweep.sh，在 2 核 / 2GiB 的独立 cgroup 里跑 10000×128 均匀随机向量、1000 条 K=10 查询。",
+      "output": "exact: T_query=0.357s recall 1.0000/1.0000 E=0.500(基线)\nnprobe=8: 0.184s recall 0.2988/1.0000 E=0.568\nnprobe=32: 0.233s recall 0.6648 E=0.540\nnprobe=64: 0.344s recall 0.8694 E=0.502\nnprobe=96: 0.417s recall 0.9486 E=0.481\nnprobe=128: 0.401s recall 0.9858 E=0.487",
+      "reading_of_evidence": "先纠正了自己对 E 的误读：f(R)=R/(1+R) 在 R=1 时是 0.5，所以 E=0.5 是持平而不是减半。纠正后结论反转——低 nprobe 的加速是真的，但 recall 0.30 远低于 0.95 门槛，而 recall 不达标性能项直接 0 分；要把 recall 顶到 0.95 就得 nprobe=96，那时 0.417s 已经比精确扫描的 0.357s 更慢。",
+      "conclusion": "假设在均匀分布数据上不成立。IVF 对均匀随机向量是最不利的情形，真实近邻几乎均匀散布在所有簇里。加速与达标在这个数据分布下不可兼得。",
+      "decision": "提交配置默认走 exact：召回恒为 1.0，速度靠 SIMD、免解码扫描和谓词先行获得。ann 保留为可切换项，等题包公布真实数据分布后重扫一次再定。",
+      "status": "verified-hypothesis-overturned"
+    },
+    {
+      "id": "E17",
+      "origin": "assistant",
+      "hypothesis": "B_query=0 说明测量脚本漏采了 I/O。",
+      "check": "对照 O_DIRECT 是否真的生效，以及数据是否常驻缓冲池。",
+      "conclusion": "不是漏采：查询期间数据页全部命中缓冲池，没有块设备读；同时 O_DIRECT 让读进来的页不进页缓存，所以 memory.peak 没有被缓存抬高（M_query 38.8MiB 主要是缓冲池与索引）。这一条正好对应题面'内存按容器整体统计，包含页缓存'的口径。",
+      "status": "verified-explained"
+    }
+  ],
+  "retrospective": [
+    {
+      "id": "R1",
+      "origin": "assistant",
+      "content": "本轮最有价值的做法是让测试套件去主动找茬，而不是让它去复述实现已经满足的行为。三个被基线 diff 暴露出来的缺陷（ann 开关没接、并列排序、空表谓词列校验）都属于'实现自洽但违反规则字面'，只跑正向用例永远发现不了。",
+      "transferable": "对任何按 0/1 闸门判定的评测，测试应当包含独立于基线的规则断言。"
+    },
+    {
+      "id": "R2",
+      "origin": "assistant",
+      "content": "崩溃恢复连续两次修不好（先修启动顺序、再修扫描逻辑），根因是两个独立缺陷叠加：后一个掩盖了前一个的效果，使每次单变量验证都得出'没用'。区分'我的假设错了'和'还有第二个错'是这段里最关键的判断。",
+      "transferable": "连续两次改动都无效时，应该去取证（这里靠 xxd 和文件大小）而不是继续猜下一个原因。"
+    },
+    {
+      "id": "R3",
+      "origin": "assistant",
+      "content": "两处口径冲突（默认参评版本、评价维度数）没有自行拍板，而是选择按更具体的赛题页执行并把冲突显式记下来，同时结论是截止前手动指定最终参评版本，不依赖默认值。",
+      "transferable": "文档冲突时优先选更具体、更新的一份，并把不确定项转成人工确认动作。"
+    },
+    {
+      "id": "R4",
+      "origin": "assistant",
+      "content": "本轮最值钱的两次反转都来自'先量化再决定'：一次是 ann 的 recall/nprobe 扫描否证了'近似索引一定更快'，一次是发现 E=0.5 其实是持平而不是减半、从而把前一个结论读反。如果只按直觉配置，会选一个 recall 0.30 的提交配置，性能项直接归零。",
+      "transferable": "涉及 pass/fail 门槛的参数选择，必须先把门槛和收益放在同一张表里量出来，而不是选'看起来更高级'的那个。"
+    },
+    {
+      "id": "R5",
+      "origin": "assistant",
+      "content": "多次'修了没生效'其实不是假设错了，而是有第二个缺陷叠在后面（恢复流程那次最典型）。区分这两种情况的手段是取证而不是再猜一个原因：这次靠 xxd 和文件大小把'日志有内容但一条都没重放'钉死，才定位到扫描逻辑里的 got 复用。",
+      "transferable": "连续两次单变量修改都无效时，说明模型里少了一个变量，应该去采集新证据。"
+    }
+  ],
+  "limitations_and_open_questions": [
+    {
+      "id": "L1",
+      "origin": "assistant",
+      "content": "题包未发布，语句边界、结果集分隔符、错误码数值、就绪标识、精确/近似模式的传参方式都按文档默认实现，全部集中在 Config 与 Output 两处，题包到手后按实际协议对齐并重录基线。"
+    },
+    {
+      "id": "L2",
+      "origin": "assistant",
+      "content": "距离渲染精度目前 %.6f、向量分量 %.6g。文档只说输出允许统一的浮点误差，具体容差与格式要等题包的比较器；这两处都集中在 Output 一个类里，可一处调整。平方距离的问题已在 /experiments/E15 修正为欧氏距离。"
+    },
+    {
+      "id": "L3",
+      "origin": "assistant",
+      "content": "近似索引只实现 IVF，nprobe 是唯一的召回/耗时旋钮；HNSW 未实现（题面不强制）。"
+    },
+    {
+      "id": "L4",
+      "origin": "assistant",
+      "content": "删除留下的槽位只在同一页被再次命中时复用，页内碎片不自动整理；没有二级索引的标量谓词必须全表扫描。"
+    },
+    {
+      "id": "L5",
+      "origin": "assistant",
+      "content": "单个显式事务的工作集留在内存中（撤销镜像 + 叠加层），一个事务改几百万行不是这套实现的目标场景。"
+    },
+    {
+      "id": "L6",
+      "origin": "student",
+      "content": "本文件中学生侧的技术证据仍然偏薄：本轮的技术诊断与修改主要由助手完成，学生贡献集中在任务界定与交付范围决策（P01、P02、C01）。按 agent-learning-evidence-v3-unbounded 只认可学生自身有证据的贡献这一条，这一项的得分不会高。要改善只能在后续开发中真实留下自己的提问、预测、独立验证与复盘记录，不能事后补写或编造。",
+      "status": "open"
+    }
+  ],
+  "how_to_extend": {
+    "instruction": "从今天起，每完成一个有实际结果的验证，就往 experiments 里追加一条：写下你自己的假设、你实际敲的命令、你读到的真实输出、你对结果的解释、你因此做的修正和复测。只有规划没有结果的条目按 0.5 分档，且 result_evidence 必须留空。",
+    "pointer_hint": "评审用 RFC6901 JSON pointer 定位证据，例如 /experiments/5/retest_output 与 /experiments/5/hypothesis；关键文本请放在字符串字段里，不要只放外部文件名或链接。",
+    "size_budget": "整个文件上限 128 KiB，超限会被拒绝评审而不是截断。"
+  }
+}

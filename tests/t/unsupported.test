@@ -1,0 +1,161 @@
+# unsupported: every excluded construct must answer a contracted error and
+# must never be silently executed with a different meaning (rule 7).
+
+CREATE TABLE u (id BIGINT PRIMARY KEY, s VARCHAR(8), n BIGINT, v VECTOR(2));
+
+INSERT INTO u VALUES (1, 'a', 10, [0, 0]), (2, 'b', 20, [1, 0]);
+
+# NULL in every position
+# expect-error UNSUPPORTED
+INSERT INTO u VALUES (3, NULL, 30, [0, 0]);
+
+# expect-error UNSUPPORTED
+UPDATE u SET s = NULL WHERE id = 1;
+
+# expect-error UNSUPPORTED
+SELECT * FROM u WHERE s IS NULL;
+
+# expect-error UNSUPPORTED
+SELECT * FROM u WHERE NOT (id = 1);
+
+# expect-error SYNTAX_ERROR
+SELECT * FROM u WHERE id = 1 OR id = 2;
+
+# expect-error UNSUPPORTED
+SELECT * FROM u WHERE id IN (1, 2);
+
+# expect-error UNSUPPORTED
+SELECT * FROM u WHERE s LIKE 'a%';
+
+# expect-error UNSUPPORTED
+SELECT * FROM u WHERE n BETWEEN 1 AND 5;
+
+# aggregates / grouping
+# expect-error UNSUPPORTED
+SELECT COUNT(*) FROM u;
+
+# expect-error UNSUPPORTED
+SELECT SUM(n) FROM u;
+
+# expect-error UNSUPPORTED
+SELECT MAX(n) FROM u;
+
+# expect-error UNSUPPORTED
+SELECT s, COUNT(id) FROM u GROUP BY s;
+
+# expect-error UNSUPPORTED
+SELECT s FROM u GROUP BY s HAVING COUNT(s) > 1;
+
+# DISTINCT / set ops
+# expect-error UNSUPPORTED
+SELECT DISTINCT s FROM u;
+
+# expect-error UNSUPPORTED
+SELECT id FROM u UNION SELECT id FROM u;
+
+# JOIN / subquery
+# expect-error UNSUPPORTED
+SELECT a FROM u JOIN u ON u.id = a;
+
+# expect-error UNSUPPORTED
+SELECT id FROM u AS x;
+
+# DELETE/UPDATE with an unsupported predicate shape must touch nothing
+# expect-error SYNTAX_ERROR
+DELETE FROM u WHERE id = 1 OR id = 2;
+
+# expect-error UNSUPPORTED
+UPDATE u SET n = 0 WHERE id IN (1, 2);
+
+SELECT * FROM u ORDER BY id;
+
+# DDL outside the subset
+# expect-error UNSUPPORTED
+ALTER TABLE u ADD COLUMN x BIGINT;
+
+# expect-error UNSUPPORTED
+ALTER TABLE u DROP COLUMN s;
+
+# expect-error UNSUPPORTED
+TRUNCATE TABLE u;
+
+# expect-error UNSUPPORTED
+CREATE VIEW w AS SELECT * FROM u;
+
+# expect-error UNSUPPORTED
+DROP INDEX ix ON u;
+
+# expect-error UNSUPPORTED
+SHOW TABLES;
+
+# expect-error UNSUPPORTED
+SHOW CREATE TABLE u;
+
+# expect-error UNSUPPORTED
+DESCRIBE u;
+
+# expect-error UNSUPPORTED
+EXPLAIN SELECT * FROM u;
+
+# expect-error UNSUPPORTED
+USE mydb;
+
+# expect-error UNSUPPORTED
+REPLACE INTO u VALUES (1, 'z', 1, [0, 0]);
+
+# expect-error SYNTAX_ERROR
+INSERT INTO u VALUES (5, 'five', 5, [0, 0]) ON DUPLICATE KEY UPDATE s = 'hit';
+
+# expect-error UNSUPPORTED
+CREATE TABLE fk (id BIGINT PRIMARY KEY, uid BIGINT, FOREIGN KEY (uid) REFERENCES u(id));
+
+# expect-error UNSUPPORTED
+CREATE TABLE uniq_t (id BIGINT PRIMARY KEY, s VARCHAR(4), UNIQUE (s));
+
+# expect-error UNSUPPORTED
+CREATE TABLE deft (id BIGINT PRIMARY KEY, s VARCHAR(4) DEFAULT 'x');
+
+# savepoints / nested transaction control
+# expect-error UNSUPPORTED
+SAVEPOINT sp1;
+
+# expect-error UNSUPPORTED
+ROLLBACK TO sp1;
+
+# expect-error UNSUPPORTED
+RELEASE sp1;
+
+# primary-key update is excluded
+# expect-error UNSUPPORTED
+UPDATE u SET id = 999 WHERE id = 1;
+
+# the session is still healthy and data untouched after all of the above
+SELECT * FROM u ORDER BY id;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM u ORDER BY d ASC LIMIT 2;
+
+BEGIN;
+INSERT INTO u VALUES (8, 'eight', 8, [8, 8]);
+COMMIT;
+
+# ...and unsupported statements still do not mutate anything mid-transaction
+BEGIN;
+
+# expect-error SYNTAX_ERROR
+DELETE FROM u WHERE id = 8 OR id = 1;
+
+# expect-error NO_SUCH_TABLE
+SELECT * FROM nope;
+
+ROLLBACK;
+
+SELECT * FROM u ORDER BY id;
+
+# unknown statement introspection
+# expect-error UNSUPPORTED
+PING;
+
+# expect-error UNSUPPORTED
+WITH cte AS (SELECT 1) SELECT * FROM u;
+
+DROP TABLE u;

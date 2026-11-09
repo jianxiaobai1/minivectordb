@@ -1,0 +1,66 @@
+OK
+OK 4
+1	alice	30
+2	bob	20
+4	dave	40
+3	carol	20
+alice	30
+bob	20
+dave	40
+carol	20
+2	bob
+3	carol
+1
+1
+4
+2
+3
+bob
+carol
+dave
+OK
+OK 4
+2	x
+5	x
+9	x
+7	y
+7
+2
+5
+9
+4	dave
+1	alice
+2	bob
+2
+3
+2
+3
+OK 1
+1	50
+OK 1
+OK 1
+ERROR UNSUPPORTED: this projection expression is not supported
+1	ann	7
+2	bob	20
+3	carol	20
+OK
+OK
+ERROR NO_SUCH_TABLE: table 'users' does not exist
+ERROR NO_SUCH_TABLE: table 'nope' does not exist
+OK
+OK 1
+ERROR DUPLICATE_TABLE: table 'dup' already exists
+ERROR NO_SUCH_COLUMN: unknown column 'nope'
+ERROR NO_SUCH_COLUMN: column 'nope' is not in 'dup'
+OK
+ERROR NO_SUCH_COLUMN: column 'nope' is not in 'empty_t'
+ERROR NO_SUCH_COLUMN: unknown ORDER BY column 'nope'
+ERROR SYNTAX_ERROR: table requires exactly one BIGINT primary key
+OK
+OK
+OK
+OK 2
+1	one
+2	two
+OK 2
+OK

@@ -1,0 +1,28 @@
+# recall: 600 random 4-d vectors, IVF index; ann mode must keep Recall@10
+# high against the exact results (rule 16) and the CLI --vector-mode=ann
+# switch must actually engage approximate search (rule 15).
+
+CREATE TABLE rv (id BIGINT PRIMARY KEY, v VECTOR(4));
+
+# gen-vectors rv 600 4 20261109
+
+CREATE VECTOR INDEX rvix ON rv(v);
+
+# sanity: a handful of exact answers are part of the baseline
+SELECT id, L2_DISTANCE(v, [0.5, 0.5, 0.5, 0.5]) AS d FROM rv ORDER BY d ASC LIMIT 5;
+
+# recall 10 0.95
+
+# restart with the approximate mode selected on the command line, with a
+# deliberately tiny nprobe so approximate and exact answers must diverge
+# if the flag is honoured.
+# mode ann --ivf-nprobe=1
+
+# expect-ann-active 10
+
+# mode exact
+
+# after leaving ann the exact answers must be restored bit for bit
+SELECT id, L2_DISTANCE(v, [0.5, 0.5, 0.5, 0.5]) AS d FROM rv ORDER BY d ASC LIMIT 5;
+
+DROP TABLE rv;

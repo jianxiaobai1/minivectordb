@@ -1,0 +1,108 @@
+# types_and_limits: BIGINT range, VARCHAR Unicode rules, VECTOR validation.
+
+CREATE TABLE t (id BIGINT PRIMARY KEY, s VARCHAR(3), v VECTOR(2));
+
+# BIGINT full range
+INSERT INTO t VALUES (9223372036854775807, 'max', [1, 2]);
+SELECT * FROM t;
+DELETE FROM t;
+
+# INT64_MIN is a legal BIGINT value and must be accepted.
+INSERT INTO t VALUES (-9223372036854775808, 'min', [3, 4]);
+SELECT * FROM t;
+DELETE FROM t;
+
+# beyond range must be rejected
+# expect-error VALUE_OUT_OF_RANGE
+INSERT INTO t VALUES (99999999999999999999999, 'big', [0, 0]);
+
+# VARCHAR length counts Unicode code points, not bytes.
+INSERT INTO t VALUES (1, '中文a', [0, 0]);
+INSERT INTO t VALUES (2, '😀', [0, 1]);
+INSERT INTO t VALUES (3, '😀😀😀', [0, 2]);
+
+# expect-error VARCHAR_TOO_LONG
+INSERT INTO t VALUES (4, 'toolong', [0, 3]);
+
+# expect-error VARCHAR_TOO_LONG
+INSERT INTO t VALUES (5, '四个汉字', [0, 4]);
+
+# expect-error VARCHAR_TOO_LONG
+INSERT INTO t VALUES (6, '😀😀😀😀', [0, 5]);
+
+SELECT * FROM t ORDER BY id;
+
+# strings compare by code point order
+SELECT id FROM t WHERE s > '中' ORDER BY id;
+SELECT id FROM t WHERE s = '中文a' ORDER BY id;
+SELECT id, s FROM t ORDER BY s;
+
+# type mismatches
+# expect-error TYPE_MISMATCH
+INSERT INTO t VALUES ('str', 'x', [0, 0]);
+
+# expect-error TYPE_MISMATCH
+INSERT INTO t VALUES (10, 5, [0, 0]);
+
+# expect-error TYPE_MISMATCH
+INSERT INTO t VALUES (11, 'x', 5);
+
+# vector dimension must match
+# expect-error VECTOR_DIM_MISMATCH
+INSERT INTO t VALUES (12, 'ok', [1, 2, 3]);
+
+# expect-error VECTOR_DIM_MISMATCH
+INSERT INTO t VALUES (13, 'ok', [1]);
+
+# empty vector
+# expect-error VECTOR_DIM_MISMATCH
+INSERT INTO t VALUES (14, 'ok', []);
+
+# quoted vector literal form
+INSERT INTO t VALUES (15, 'ok', '[7, 8]');
+SELECT * FROM t WHERE id = 15;
+
+# non-finite and overflowing components are rejected (string form reaches
+# the value validator and must give INVALID_VECTOR)
+# expect-error INVALID_VECTOR
+INSERT INTO t VALUES (16, 'ok', '[nan, 1]');
+
+INSERT INTO t VALUES (90, 'ok', [nan, 1]);
+INSERT INTO t VALUES (91, 'ok', [inf, 1]);
+
+# expect-error INVALID_VECTOR
+INSERT INTO t VALUES (17, 'ok', '[inf, 1]');
+
+# expect-error INVALID_VECTOR
+INSERT INTO t VALUES (18, 'ok', '[1e400, 1]');
+
+# expect-error INVALID_VECTOR
+INSERT INTO t VALUES (19, 'ok', '[1, 2e399]');
+
+# expect-error INVALID_VECTOR
+INSERT INTO t VALUES (20, 'ok', '[-inf, 1]');
+
+# float literals as components are accepted, rendered with %.6g
+INSERT INTO t VALUES (21, 'ok', [2.0, 3.0]);
+SELECT v FROM t WHERE id = 21;
+DELETE FROM t WHERE id = 21;
+INSERT INTO t VALUES (22, 'pi', [3.14159265358979, 0.01]);
+SELECT v FROM t WHERE id = 22;
+
+# at most one vector column per table
+# expect-error UNSUPPORTED
+CREATE TABLE twov (id BIGINT PRIMARY KEY, a VECTOR(2), b VECTOR(3));
+
+# primary key must be BIGINT
+# expect-error TYPE_MISMATCH
+CREATE TABLE badpk (s VARCHAR(4) PRIMARY KEY);
+
+# updating the primary key is unsupported
+# expect-error UNSUPPORTED
+UPDATE t SET id = 99 WHERE id = 1;
+
+# zero-dimension vector is a syntax error
+# expect-error SYNTAX_ERROR
+CREATE TABLE zerodim (id BIGINT PRIMARY KEY, v VECTOR(0));
+
+DROP TABLE t;

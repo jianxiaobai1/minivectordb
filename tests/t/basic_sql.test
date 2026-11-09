@@ -1,0 +1,105 @@
+# basic_sql: DDL, DML, projection, WHERE, ORDER BY, LIMIT, comments.
+
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR(16),
+    score BIGINT
+);
+
+/* block comment between statements */
+INSERT INTO users VALUES (1, 'alice', 30), (2, 'bob', 20), (4, 'dave', 40), (3, 'carol', 20);
+
+SELECT * FROM users;
+
+SELECT name, score FROM users;
+
+SELECT id, name FROM users WHERE score = 20;
+
+SELECT id FROM users WHERE score > 20 AND score < 40;
+
+SELECT id FROM users WHERE score >= 30;
+
+SELECT id FROM users WHERE score <= 20 ORDER BY id ASC;
+
+SELECT name FROM users WHERE name <> 'alice' ORDER BY name;
+
+-- ORDER BY tie on `name` column value 'tt'; rule: ties break by ascending primary key.
+CREATE TABLE tie (id BIGINT PRIMARY KEY, g VARCHAR(4));
+INSERT INTO tie VALUES (5, 'x'), (2, 'x'), (9, 'x'), (7, 'y');
+SELECT id, g FROM tie ORDER BY g ASC;
+SELECT id FROM tie ORDER BY g DESC;
+
+SELECT id, name FROM users ORDER BY score DESC, id ASC LIMIT 3;
+
+SELECT id FROM users ORDER BY id ASC LIMIT 2 OFFSET 1;
+
+SELECT id FROM users ORDER BY id ASC LIMIT 1, 2;
+
+SELECT id FROM users LIMIT 0;
+
+SELECT id FROM users WHERE id = 999;
+
+UPDATE users SET score = 50 WHERE id = 1;
+
+SELECT id, score FROM users WHERE id = 1;
+
+UPDATE users SET name = 'ann', score = 7 WHERE score = 50;
+
+DELETE FROM users WHERE id = 4;
+
+# expect-error UNSUPPORTED
+SELECT COUNT(*) FROM users;
+
+SELECT * FROM users ORDER BY id;
+
+DROP TABLE users;
+DROP TABLE tie;
+
+# expect-error NO_SUCH_TABLE
+SELECT * FROM users;
+
+# expect-error NO_SUCH_TABLE
+DROP TABLE nope;
+
+CREATE TABLE dup (id BIGINT PRIMARY KEY, x BIGINT);
+
+INSERT INTO dup VALUES (1, 10);
+
+# expect-error DUPLICATE_TABLE
+CREATE TABLE dup (id BIGINT PRIMARY KEY);
+
+# expect-error NO_SUCH_COLUMN
+SELECT nope FROM dup;
+
+# expect-error NO_SUCH_COLUMN
+SELECT id FROM dup WHERE nope = 1;
+
+CREATE TABLE empty_t (id BIGINT PRIMARY KEY, x BIGINT);
+
+# Rule: a bad column reference must error even when the table is empty
+# (a lazy per-row check silently returns "no rows" instead).
+# expect-error NO_SUCH_COLUMN
+SELECT id FROM empty_t WHERE nope = 1;
+
+# expect-error NO_SUCH_COLUMN
+SELECT id FROM empty_t ORDER BY nope;
+
+# expect-error SYNTAX_ERROR
+CREATE TABLE noid (a BIGINT, b VARCHAR(4));
+
+DROP TABLE dup;
+DROP TABLE empty_t;
+
+# multi-line statement, comments inside, terminator on the last line
+CREATE TABLE multi (id BIGINT PRIMARY KEY, v VARCHAR(8));
+INSERT INTO multi          -- comment inside a statement
+    (id, v)
+VALUES
+    (1, 'one'),
+    (2, 'two');
+SELECT * FROM multi ORDER BY id;
+
+# DELETE without WHERE removes every row
+DELETE FROM multi;
+SELECT * FROM multi;
+DROP TABLE multi;

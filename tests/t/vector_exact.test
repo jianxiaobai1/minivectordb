@@ -1,0 +1,66 @@
+# vector_exact: exact TopK semantics, distance rendering, tie order by pk.
+
+CREATE TABLE docs (id BIGINT PRIMARY KEY, tag VARCHAR(4), v VECTOR(2));
+
+INSERT INTO docs VALUES (1, 'a', [0, 0]), (3, 'b', [1, 0]), (2, 'c', [0, 1]), (4, 'd', [2, 0]), (7, 'e', [0.5, 0]);
+
+# squared-L2 ordering: 1(0) < 7(0.25) < {2,3}(1 tie -> pk asc) < 4(4)
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM docs ORDER BY d ASC LIMIT 3;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM docs ORDER BY d ASC LIMIT 10;
+
+# fewer matching rows than K must return them all, never pad
+SELECT id, L2_DISTANCE(v, '[0, 0]') AS d FROM docs ORDER BY d ASC LIMIT 5;
+
+# offset skips the nearest neighbours
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM docs ORDER BY d LIMIT 2 OFFSET 1;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM docs ORDER BY d LIMIT 3 OFFSET 4;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM docs ORDER BY d LIMIT 2 OFFSET 9;
+
+# DESC puts the farthest first
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM docs ORDER BY d DESC LIMIT 2;
+
+# distance to a different query point, string literal form
+SELECT id, L2_DISTANCE(v, '[1, 0]') AS dist FROM docs ORDER BY dist ASC LIMIT 2;
+
+# projection order of the two arguments must not matter
+SELECT id, L2_DISTANCE([0, 0], v) AS d FROM docs ORDER BY d ASC LIMIT 3;
+
+# distance-only projection
+SELECT L2_DISTANCE(v, [0, 0]) AS dd FROM docs ORDER BY dd ASC LIMIT 2;
+
+# unsorted distance projection returns scan-order rows with rendered distances
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM docs;
+
+# distance threshold inside WHERE combined with ordering (still TopK-safe)
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM docs WHERE L2_DISTANCE(v, [0, 0]) < 0.5 ORDER BY d ASC LIMIT 5;
+
+# exact value checks: [2,0] against [0,0] is 4.000000 ; [0.5,0] is 0.250000
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM docs WHERE id = 4;
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM docs WHERE id = 7;
+
+SELECT id, L2_DISTANCE(docs.v, [0, 0]) AS d FROM docs ORDER BY d ASC LIMIT 1;
+
+# error paths
+# expect-error VECTOR_DIM_MISMATCH
+SELECT id, L2_DISTANCE(v, [0, 0, 0]) AS d FROM docs ORDER BY d LIMIT 3;
+
+# expect-error TYPE_MISMATCH
+SELECT id, L2_DISTANCE(tag, [0]) AS d FROM docs ORDER BY d LIMIT 3;
+
+# expect-error NO_SUCH_COLUMN
+SELECT id, L2_DISTANCE(nope, [0, 0]) AS d FROM docs ORDER BY d LIMIT 3;
+
+# expect-error SYNTAX_ERROR
+SELECT id, L2_DISTANCE(v) AS d FROM docs ORDER BY d LIMIT 3;
+
+# expect-error TYPE_MISMATCH
+SELECT id, L2_DISTANCE(v, tag) AS d FROM docs ORDER BY d LIMIT 3;
+
+# ORDER BY a normal column with distance projected: general path, tie rule applies
+INSERT INTO docs VALUES (8, 'a', [0.2, 0]);
+SELECT id, tag, L2_DISTANCE(v, [0, 0]) AS d FROM docs ORDER BY tag ASC, d DESC LIMIT 4;
+
+DROP TABLE docs;

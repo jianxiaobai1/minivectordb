@@ -1,0 +1,110 @@
+# txn: BEGIN/COMMIT/ROLLBACK semantics incl. read-your-writes, statement
+# atomicity, and vector-search consistency after rollback (rules 8-10).
+
+CREATE TABLE tx (id BIGINT PRIMARY KEY, s VARCHAR(8), v VECTOR(2));
+
+INSERT INTO tx VALUES (1, 'one', [0, 0]), (2, 'two', [1, 1]);
+
+# autocommit baseline query for later comparison
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM tx ORDER BY d ASC LIMIT 3;
+
+BEGIN;
+
+INSERT INTO tx VALUES (3, 'three', [0, 0.5]);
+
+# read own uncommitted writes (rule "事务内读到自己的修改")
+SELECT * FROM tx ORDER BY id;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM tx ORDER BY d ASC LIMIT 3;
+
+UPDATE tx SET v = [9, 9] WHERE id = 1;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM tx ORDER BY d ASC LIMIT 2;
+
+DELETE FROM tx WHERE id = 2;
+
+SELECT * FROM tx ORDER BY id;
+
+ROLLBACK;
+
+# rows, visible set and vector results must all be back to pre-BEGIN (rule 10)
+SELECT * FROM tx ORDER BY id;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM tx ORDER BY d ASC LIMIT 3;
+
+# a failed statement leaves nothing behind, earlier txn work survives (rule 9)
+BEGIN;
+
+INSERT INTO tx VALUES (4, 'four', [0, 0]);
+
+# expect-error DUPLICATE_KEY
+INSERT INTO tx VALUES (5, 'five', [1, 0]), (4, 'dup', [1, 0]);
+
+SELECT * FROM tx ORDER BY id;
+
+COMMIT;
+
+SELECT * FROM tx ORDER BY id;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM tx ORDER BY d ASC LIMIT 3;
+
+# failure outside a transaction must not persist the partial row either
+# expect-error DUPLICATE_KEY
+INSERT INTO tx VALUES (6, 'six', [2, 2]), (4, 'dup', [2, 2]);
+
+SELECT id FROM tx ORDER BY id;
+
+# vector dimension failure mid-txn: statement rolled back, txn still usable
+BEGIN;
+
+# expect-error VECTOR_DIM_MISMATCH
+UPDATE tx SET v = [1, 2, 3] WHERE id = 4;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM tx ORDER BY d ASC LIMIT 3;
+
+UPDATE tx SET s = 'QUATRE' WHERE id = 4;
+
+COMMIT;
+
+SELECT * FROM tx WHERE id = 4;
+
+# PK update stays unsupported inside a txn
+BEGIN;
+
+# expect-error UNSUPPORTED
+UPDATE tx SET id = 100 WHERE id = 4;
+
+ROLLBACK;
+
+# bare COMMIT / ROLLBACK without an open transaction are accepted no-ops
+COMMIT;
+
+ROLLBACK;
+
+BEGIN;
+
+# expect-error TXN_STATE_ERROR
+BEGIN;
+
+INSERT INTO tx VALUES (7, 'seven', [3, 3]);
+
+COMMIT;
+
+SELECT * FROM tx ORDER BY id;
+
+# rollback of a delete-then-reinsert pattern restores the old vector exactly
+BEGIN;
+
+DELETE FROM tx WHERE id = 7;
+
+INSERT INTO tx VALUES (7, 'seven-v2', [0, 0.01]);
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM tx ORDER BY d ASC LIMIT 2;
+
+ROLLBACK;
+
+SELECT * FROM tx WHERE id = 7;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM tx ORDER BY d ASC LIMIT 2;
+
+DROP TABLE tx;

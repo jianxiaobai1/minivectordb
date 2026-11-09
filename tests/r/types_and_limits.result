@@ -1,0 +1,49 @@
+OK
+OK 1
+9223372036854775807	max	[1,2]
+OK 1
+OK 1
+-9223372036854775808	min	[3,4]
+OK 1
+ERROR VALUE_OUT_OF_RANGE: integer out of range: 99999999999999999999999
+OK 1
+OK 1
+OK 1
+ERROR VARCHAR_TOO_LONG: value for 's' exceeds VARCHAR(3)
+ERROR VARCHAR_TOO_LONG: value for 's' exceeds VARCHAR(3)
+ERROR VARCHAR_TOO_LONG: value for 's' exceeds VARCHAR(3)
+1	中文a	[0,0]
+2	😀	[0,1]
+3	😀😀😀	[0,2]
+1
+2
+3
+1
+1	中文a
+2	😀
+3	😀😀😀
+ERROR TYPE_MISMATCH: column 'id' requires BIGINT
+ERROR TYPE_MISMATCH: column 's' requires VARCHAR
+ERROR TYPE_MISMATCH: column 'v' requires VECTOR
+ERROR VECTOR_DIM_MISMATCH: vector for 'v' has 3 components, column is VECTOR(2)
+ERROR VECTOR_DIM_MISMATCH: vector for 'v' has 1 components, column is VECTOR(2)
+ERROR VECTOR_DIM_MISMATCH: empty vector literal
+OK 1
+15	ok	[7,8]
+ERROR INVALID_VECTOR: vector contains NaN
+ERROR INVALID_VECTOR: vector contains nan
+ERROR INVALID_VECTOR: vector contains inf
+ERROR INVALID_VECTOR: vector component overflows float32
+ERROR INVALID_VECTOR: vector component overflows float32
+ERROR INVALID_VECTOR: vector component overflows float32
+ERROR INVALID_VECTOR: vector component overflows float32
+OK 1
+[2,3]
+OK 1
+OK 1
+[3.14159,0.01]
+ERROR UNSUPPORTED: at most one VECTOR column per table
+ERROR TYPE_MISMATCH: primary key must be BIGINT
+ERROR UNSUPPORTED: updating the primary key is not supported
+ERROR SYNTAX_ERROR: VECTOR requires a positive dimension near offset 1782
+OK

@@ -1,0 +1,69 @@
+# crash_recovery: SIGKILL model (rule 12) — committed transactions survive,
+# uncommitted ones vanish completely, and the restart must come up ready.
+
+CREATE TABLE c (id BIGINT PRIMARY KEY, s VARCHAR(8), v VECTOR(2));
+
+INSERT INTO c VALUES (1, 'one', [0, 0]), (2, 'two', [1, 0]);
+
+CREATE VECTOR INDEX cix ON c(v);
+
+INSERT INTO c VALUES (3, 'three', [0, 1]);
+
+BEGIN;
+INSERT INTO c VALUES (4, 'four', [5, 5]);
+COMMIT;
+
+# committed transaction is durable before the response (rule 11),
+# so it must be present after a hard crash
+SELECT * FROM c ORDER BY id;
+
+# a transaction that never reached COMMIT must vanish as a whole
+BEGIN;
+
+INSERT INTO c VALUES (9, 'ghost', [7, 7]);
+
+DELETE FROM c WHERE id = 1;
+
+UPDATE c SET s = 'changed' WHERE id = 2;
+
+# invisible-set check before the crash: the txn sees its own writes
+SELECT * FROM c ORDER BY id;
+
+# kill
+
+# everything committed earlier survives; the open txn left no trace (rule 12)
+SELECT * FROM c ORDER BY id;
+
+SELECT id, L2_DISTANCE(v, [0, 0]) AS d FROM c ORDER BY d ASC LIMIT 4;
+
+# the engine came back ready and accepts writes again
+INSERT INTO c VALUES (10, 'post', [0.5, 0.5]);
+
+SELECT * FROM c WHERE id = 10;
+
+# a crash between many autocommit statements: every confirmed OK must hold
+BEGIN;
+DELETE FROM c WHERE id = 10;
+COMMIT;
+
+INSERT INTO c VALUES (20, 'a20', [0, 20]);
+INSERT INTO c VALUES (21, 'a21', [0, 21]);
+INSERT INTO c VALUES (22, 'a22', [0, 22]);
+UPDATE c SET s = 'U21' WHERE id = 21;
+DELETE FROM c WHERE id = 20;
+
+# kill
+
+SELECT * FROM c ORDER BY id;
+
+SELECT id, L2_DISTANCE(v, [0, 22]) AS d FROM c ORDER BY d ASC LIMIT 2;
+
+# crash inside a transaction with no final statement response
+BEGIN;
+INSERT INTO c VALUES (30, 'thirtys', [3, 0]);
+
+# kill
+
+SELECT * FROM c ORDER BY id;
+
+DROP TABLE c;

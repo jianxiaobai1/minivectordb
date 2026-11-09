@@ -1,0 +1,54 @@
+OK
+OK 2
+OK
+OK 1
+OK
+OK 1
+OK
+1	one	[0,0]
+2	two	[1,0]
+3	three	[0,1]
+4	four	[5,5]
+OK
+OK 1
+OK 1
+OK 1
+2	changed	[1,0]
+3	three	[0,1]
+4	four	[5,5]
+9	ghost	[7,7]
+1	one	[0,0]
+2	two	[1,0]
+3	three	[0,1]
+4	four	[5,5]
+1	0.000000
+2	1.000000
+3	1.000000
+4	7.071068
+OK 1
+10	post	[0.5,0.5]
+OK
+OK 1
+OK
+OK 1
+OK 1
+OK 1
+OK 1
+OK 1
+1	one	[0,0]
+2	two	[1,0]
+3	three	[0,1]
+4	four	[5,5]
+21	U21	[0,21]
+22	a22	[0,22]
+22	0.000000
+21	1.000000
+OK
+OK 1
+1	one	[0,0]
+2	two	[1,0]
+3	three	[0,1]
+4	four	[5,5]
+21	U21	[0,21]
+22	a22	[0,22]
+OK

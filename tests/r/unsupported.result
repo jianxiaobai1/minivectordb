@@ -1,0 +1,59 @@
+OK
+OK 2
+ERROR UNSUPPORTED: NULL is not supported
+ERROR UNSUPPORTED: NULL is not supported
+ERROR UNSUPPORTED: IS / NULL predicates are not supported
+ERROR UNSUPPORTED: NOT is not supported
+ERROR SYNTAX_ERROR: unexpected token after end of statement near offset 318
+ERROR UNSUPPORTED: IN predicate is not supported
+ERROR UNSUPPORTED: LIKE predicate is not supported
+ERROR UNSUPPORTED: BETWEEN predicate is not supported
+ERROR UNSUPPORTED: this projection expression is not supported
+ERROR UNSUPPORTED: this projection expression is not supported
+ERROR UNSUPPORTED: this projection expression is not supported
+ERROR UNSUPPORTED: GROUP BY is not supported
+ERROR UNSUPPORTED: GROUP BY is not supported
+ERROR UNSUPPORTED: SELECT DISTINCT is not supported
+ERROR UNSUPPORTED: UNION is not supported
+ERROR UNSUPPORTED: table alias and JOIN are not supported
+ERROR UNSUPPORTED: table alias and JOIN are not supported
+ERROR SYNTAX_ERROR: unexpected token after end of statement near offset 749
+ERROR UNSUPPORTED: IN predicate is not supported
+1	a	10	[0,0]
+2	b	20	[1,0]
+ERROR UNSUPPORTED: ALTER is not supported by this task's SQL subset
+ERROR UNSUPPORTED: ALTER is not supported by this task's SQL subset
+ERROR UNSUPPORTED: TRUNCATE is not supported by this task's SQL subset
+ERROR UNSUPPORTED: only CREATE TABLE and CREATE VECTOR INDEX are supported
+ERROR UNSUPPORTED: only DROP TABLE is supported
+ERROR UNSUPPORTED: SHOW is not supported by this task's SQL subset
+ERROR UNSUPPORTED: SHOW is not supported by this task's SQL subset
+ERROR UNSUPPORTED: DESCRIBE is not supported by this task's SQL subset
+ERROR UNSUPPORTED: EXPLAIN is not supported by this task's SQL subset
+ERROR UNSUPPORTED: USE is not supported by this task's SQL subset
+ERROR UNSUPPORTED: REPLACE is not supported by this task's SQL subset
+ERROR SYNTAX_ERROR: unexpected token after end of statement near offset 1132
+ERROR UNSUPPORTED: table constraint FOREIGN is not supported
+ERROR UNSUPPORTED: table constraint UNIQUE is not supported
+ERROR UNSUPPORTED: column attribute DEFAULT is not supported
+ERROR UNSUPPORTED: nested transactions and savepoints are not supported
+ERROR UNSUPPORTED: savepoints are not supported
+ERROR UNSUPPORTED: nested transactions and savepoints are not supported
+ERROR UNSUPPORTED: updating the primary key is not supported
+1	a	10	[0,0]
+2	b	20	[1,0]
+1	0.000000
+2	1.000000
+OK
+OK 1
+OK
+OK
+ERROR SYNTAX_ERROR: unexpected token after end of statement near offset 1671
+ERROR NO_SUCH_TABLE: table 'nope' does not exist
+OK
+1	a	10	[0,0]
+2	b	20	[1,0]
+8	eight	8	[8,8]
+ERROR UNSUPPORTED: statement starting with 'PING' is not supported
+ERROR UNSUPPORTED: WITH is not supported by this task's SQL subset
+OK
