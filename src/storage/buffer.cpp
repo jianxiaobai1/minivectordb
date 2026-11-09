@@ -22,17 +22,6 @@ BufferPool::BufferPool(size_t page_size, size_t max_frames)
   files_.emplace_back();  // id 0 reserved
 }
 
-std::string BufferPool::filePath(uint32_t fid) const {
-  if (fid == 0 || fid >= next_file_) return {};
-  return files_[fid].path;
-}
-
-bool BufferPool::hasFile(const std::string& path) const {
-  for (size_t i = 1; i < files_.size(); ++i)
-    if (files_[i].path == path) return true;
-  return false;
-}
-
 uint32_t BufferPool::openFile(const std::string& path, bool create, bool direct) {
   for (size_t i = 1; i < files_.size(); ++i)
     if (files_[i].path == path) return static_cast<uint32_t>(i);
@@ -205,13 +194,6 @@ void BufferPool::unpin(Frame* f) {
 void BufferPool::markDirty(Frame* f) {
   f->dirty = true;
   f->xid = active_xid_;
-}
-
-size_t BufferPool::dirtyCount() const {
-  size_t n = 0;
-  for (const auto& f : pool_)
-    if (f->dirty) ++n;
-  return n;
 }
 
 void BufferPool::flush(Frame* f) {

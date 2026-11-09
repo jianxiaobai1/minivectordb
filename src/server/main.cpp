@@ -243,9 +243,10 @@ int realMain(int argc, char** argv) {
 
   std::fprintf(stderr,
                "minivectordb ready data_dir=%s page_size=%zu pool_pages=%zu mode=%s "
-               "startup_ms=%.2f recovery_ms=%.2f recovered_pages=%llu\n",
+               "direct_io=%zu startup_ms=%.2f recovery_ms=%.2f recovered_pages=%llu\n",
                cfg.data_dir.c_str(), cfg.page_size, cfg.pool_pages,
                cfg.vector_mode == Config::VectorMode::Ann ? "ann" : "exact",
+               engine->pool().directFileCount(),
                engine->stats().startup_ms, engine->stats().recovery_ms,
                static_cast<unsigned long long>(engine->stats().recovered_pages));
   std::fflush(stderr);

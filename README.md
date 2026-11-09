@@ -273,6 +273,15 @@ redo-only WAL，记录**整页镜像**：
 | 崩溃恢复 | `python3 bench/crash_test.py 6`：mid-ack 与 mid-txn 两类各若干轮 | 6/6 通过：已提交不丢、未提交不残留、无部分生效、恢复后可继续写 |
 | 持久化重启 | 同一 `--data-dir` 重启后比对 | 通过 |
 | 性能 | `python3 bench/bench.py`（独立 cgroup，按 `io.stat`/`memory.peak` 计量） | 见下表 |
+| 自包含性 | `bash scripts/verify-clean.sh`：把分支 clone 到新目录，从那里构建并跑全套 | 10/10 通过，崩溃恢复通过，构建产物不依赖本机路径 |
+| Dockerfile 构建步骤 | `bash scripts/verify-dockerfile-steps.sh` | 通过：安装布局与 `ENTRYPOINT` 路径一致；`ldd` 只剩 `libm`/`libc`（libstdc++/libgcc 已静态链入），所以 runtime 阶段不装任何包也能跑；暂存产物运行与同目录重启都正确 |
+| **`docker build` 本身** | 见下方说明 | **未验证** |
+
+`docker build` 在本机跑不起来：WSL 到 `registry-1.docker.io:443` 是 `i/o timeout`，
+连 `ubuntu:24.04` 基础镜像都拉不下来，所以失败原因是**网络而不是 Dockerfile**。
+因此上面那行只能算"构建步骤逐条验证过"，不等于镜像真的构建成功过。
+在能访问镜像仓库的机器上先跑一次 `docker build -t minivectordb .` 再提测，
+这是当前交付里唯一一处已知的未验证环节。
 
 ### 9.1 性能实测
 

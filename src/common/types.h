@@ -71,13 +71,11 @@ struct Rid {
   uint32_t page = 0;
   uint16_t slot = 0;
 
-  bool valid() const { return page != 0 || slot != 0; }
   bool operator==(const Rid& o) const { return page == o.page && slot == o.slot; }
   bool operator!=(const Rid& o) const { return !(*this == o); }
   bool operator<(const Rid& o) const {
     return page != o.page ? page < o.page : slot < o.slot;
   }
-  static Rid invalid() { return Rid{0, 0}; }
 };
 
 struct RidHash {

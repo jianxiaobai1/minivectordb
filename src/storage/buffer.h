@@ -44,14 +44,19 @@ class BufferPool {
   uint32_t openFile(const std::string& path, bool create, bool direct);
   uint32_t createFile(const std::string& path);
   void closeFile(uint32_t fid);
-  bool hasFile(const std::string& path) const;
-  std::string filePath(uint32_t fid) const;
   int fileFd(uint32_t fid) const { return files_[fid].fd; }
-  bool fileIsDirect(uint32_t fid) const { return files_[fid].direct; }
+  // Whether the data files really opened with O_DIRECT. The benchmark counts
+  // page cache in memory.peak, so a silent fallback changes what the numbers
+  // mean and has to be visible.
+  size_t directFileCount() const {
+    size_t n = 0;
+    for (size_t i = 1; i < files_.size(); ++i)
+      if (files_[i].direct) ++n;
+    return n;
+  }
 
   size_t pageSize() const { return page_size_; }
   size_t frames() const { return pool_.size(); }
-  size_t dirtyCount() const;
 
   // Fetches a page and pins it. The caller must release the guard before
   // fetching an unbounded number of other pages.
@@ -86,7 +91,6 @@ class BufferPool {
 
   size_t page_size_;
   size_t max_frames_;
-  uint32_t next_file_ = 1;
   uint32_t active_xid_ = 0;
 
   struct FileEntry {
