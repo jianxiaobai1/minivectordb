@@ -4,26 +4,34 @@ mysqltest-style suite that feeds SQL over stdin to the real `minivectordb`
 binary and diffs stdout against recorded baselines. Every case runs against
 its own temporary `--data-dir`, so cases are fully independent.
 
-## Running (all build/test work happens in WSL)
+## Running
+
+From a shell on Linux (or inside WSL), with the repo at `$REPO`:
 
 ```sh
-# one case
-wsl.exe -d Ubuntu-D -- python3 /mnt/c/Users/ZhuanZ1/Documents/Qoder/2026-11-09/5e42768a/minivectordb/tests/mysqltest.py basic_sql
+cd "$REPO"
+
+# build first
+bash scripts/build.sh                       # -> $HOME/mvd-build/build/minivectordb
 
 # everything, with a pass/fail summary (exit code != 0 on any failure)
-wsl.exe -d Ubuntu-D -- bash /mnt/c/Users/ZhuanZ1/Documents/Qoder/2026-11-09/5e42768a/minivectordb/tests/run_all.sh
+bash tests/run_all.sh
 
-# build first (native ext4 for speed)
-wsl.exe -d Ubuntu-D -- bash /mnt/c/Users/ZhuanZ1/Documents/Qoder/2026-11-09/5e42768a/build.sh
+# one case
+python3 tests/mysqltest.py basic_sql
 ```
+
+From Windows, prefix any of the above with `wsl.exe -d Ubuntu-D -- bash -c "..."`.
+Avoid putting `$` variables inside that prefix: the Windows argument layer eats them,
+so call a script file instead.
 
 The binary defaults to `/root/mvd-build/build/minivectordb`; override with
 `--binary PATH` or `MVD_BIN`. Useful driver flags: `--record` (rewrite the
 baseline), `--keep` (keep the temp data dir), `--timeout SEC`.
 
-If a script fails with `\r` errors, run `sed -i 's/\r//g' <file>` first
-(Windows-side editors may introduce CRLF; `.test`/`.result` tolerate it,
-bash scripts do not).
+If a script fails with `\r` errors, run `sed -i 's/\r//g' <file>` first.
+`.gitattributes` forces `eol=lf` for these files so a fresh clone is clean;
+the problem only shows up if a Windows editor rewrites a working-tree file.
 
 ## Layout
 
